@@ -1,0 +1,6 @@
+[submodule "sadx-mod-loader"]
+	path = sadx-mod-loader
+	url = https://github.com/sonicretro/sadx-mod-loader.git
+[submodule "simple-winsock-wrapper"]
+	path = simple-winsock-wrapper
+	url = https://github.com/SonicFreak94/simple-winsock-wrapper.git
