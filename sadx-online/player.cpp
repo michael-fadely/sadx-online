@@ -18,7 +18,7 @@ static constexpr uint16_t STATUS_MASK = Status_Hurt | Status_Ball | Status_Light
 static dirty_t<int8_t> last_action;
 static dirty_t<int16_t> last_status;
 
-Timer update_timer(1s);
+static Timer update_timer(1s);
 
 bool player_reader(MessageID id, pnum_t pnum, sws::Packet& packet)
 {
@@ -126,6 +126,7 @@ void player_writer(MessageID id, pnum_t pnum, sws::Packet& packet)
 
 void events::player_register()
 {
+	// TODO: provide method to defer processing to the right time in the game loop
 	globals::broker->register_reader(MessageID::P_Action, &player_reader);
 	globals::broker->register_reader(MessageID::P_NextAction, &player_reader);
 	globals::broker->register_reader(MessageID::P_Status, &player_reader);
@@ -174,6 +175,7 @@ void events::player_update()
 	if (update_timer.done())
 	{
 		PrintDebug("SEND TIMER!\n");
+		//globals::broker->write(MessageID::P_Action);
 		globals::broker->write(MessageID::P_Rotation);
 		globals::broker->write(MessageID::P_Position);
 		globals::broker->write(MessageID::P_Speed);

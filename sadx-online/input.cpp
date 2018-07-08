@@ -138,6 +138,8 @@ extern "C"
 			return;
 		}
 
+		broker->read();
+
 		pnum_t pnum = broker->player_number();
 
 		for (auto i = 0; i < 4; i++)
