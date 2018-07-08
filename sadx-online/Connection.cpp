@@ -82,7 +82,7 @@ Connection& Connection::operator=(Connection&& other) noexcept
 
 	ordered_out = std::move(other.ordered_out);
 	uids_out    = std::move(other.uids_out);
-	acknew_data    = std::move(other.acknew_data);
+	acknew_data = std::move(other.acknew_data);
 
 	seqs_in = std::move(other.seqs_in);
 	uids_in = std::move(other.uids_in);
@@ -234,7 +234,7 @@ SocketState Connection::send(Packet& packet, bool block)
 		case reliable_t::ordered:
 		{
 			while (std::find_if(ordered_out.begin(), ordered_out.end(),
-								[&](Store& s) { return s.sequence == outbound_sequence; }) != ordered_out.end())
+			                    [&](Store& s) { return s.sequence == outbound_sequence; }) != ordered_out.end())
 			{
 				if ((result = parent->receive(true, 1)) == SocketState::error)
 				{
@@ -247,7 +247,8 @@ SocketState Connection::send(Packet& packet, bool block)
 			break;
 		}
 
-		default: throw;
+		default:
+			throw;
 	}
 
 	return result;
