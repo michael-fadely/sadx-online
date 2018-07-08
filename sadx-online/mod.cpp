@@ -98,6 +98,9 @@ extern "C"
 		WriteData<uint8_t>(reinterpret_cast<uint8_t*>(0x0079F77C), 8); // SpringH_Main
 		WriteData<uint8_t>(reinterpret_cast<uint8_t*>(0x004418B8), 8); // IsPlayerInsideSphere (could probably use a better name!)
 
+		// Disables AI Tails
+		WriteData<uint8_t>(reinterpret_cast<uint8_t*>(0x0047ED60), 0xC3);
+
 		int argc = 0;
 		const auto argv = CommandLineToArgvW(GetCommandLineW(), &argc);
 
