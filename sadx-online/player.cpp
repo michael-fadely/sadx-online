@@ -204,11 +204,11 @@ void events::player_update()
 
 	if (update_timer.done())
 	{
-		/*PrintDebug("SEND TIMER!\n");
+		PrintDebug("SEND TIMER!\n");
 		globals::broker->write(MessageID::P_Action);
 		globals::broker->write(MessageID::P_Rotation);
 		globals::broker->write(MessageID::P_Position);
-		globals::broker->write(MessageID::P_Speed);*/
+		globals::broker->write(MessageID::P_Speed);
 		update_timer.start();
 	}
 
