@@ -116,27 +116,22 @@ void PacketBroker::read_packet_type(PacketEx& packet, const std::unordered_map<M
 	}
 }
 
+void PacketBroker::store_deferred(DeferredPoint point, ptrdiff_t start_offset)
+{
+	auto copy = packet_in;
+	copy.seek(sws::SeekCursor::both, sws::SeekType::from_start, start_offset);
+	deferred_packets[point].emplace_back(copy, tick);
+}
+
 PacketBroker::~PacketBroker()
 {
 	// restore swapped input pointers if any
 	swap_input(player_number_, 0);
 }
 
-void PacketBroker::register_reader(RegisterType type, MessageID message_id, const MessageReader& reader)
+void PacketBroker::register_reader(DeferredPoint point, MessageID message_id, const MessageReader& reader)
 {
-	switch (type)
-	{
-		case RegisterType::immediate:
-			immediate_readers[message_id] = reader;
-			break;
-		case RegisterType::input:
-			input_readers[message_id] = reader;
-			break;
-		case RegisterType::tick:
-			tick_readers[message_id] = reader;
-			break;
-		default: throw;
-	}
+	readers[point][message_id] = reader;
 }
 
 void PacketBroker::register_writer(MessageID message_id, const MessageWriter& writer)
@@ -218,7 +213,8 @@ void PacketBroker::read()
 		while (connection->pop(packet_in))
 		{
 			bool input_packet = false;
-			bool tick_packet = false;
+			bool tick_start_packet = false;
+			bool tick_end_packet = false;
 
 			const auto start_offset = packet_in.tell(sws::SeekCursor::read);
 
@@ -236,33 +232,46 @@ void PacketBroker::read()
 				}
 
 				const ptrdiff_t offset = packet_in.tell(sws::SeekCursor::read);
+
+				auto& immediate_readers = readers[DeferredPoint::immediate];
+
 				auto it = immediate_readers.find(id);
 
 				if (it == immediate_readers.end())
 				{
-					it = input_readers.find(id);
+					auto& input = readers[DeferredPoint::input];
+					it = input.find(id);
 
-					if (it != input_readers.end())
+					if (it != input.end())
 					{
 						if (!input_packet)
 						{
-							auto copy = packet_in;
-							copy.seek(sws::SeekCursor::both, sws::SeekType::from_start, start_offset);
-							input_packet_queue.emplace_back(copy, tick);
+							store_deferred(DeferredPoint::input, start_offset);
 							input_packet = true;
 						}
 					}
 
-					it = tick_readers.find(id);
+					auto& tick_start = readers[DeferredPoint::tick_start];
+					it = tick_start.find(id);
 
-					if (it != tick_readers.end())
+					if (it != tick_start.end())
 					{
-						if (!tick_packet)
+						if (!tick_start_packet)
 						{
-							auto copy = packet_in;
-							copy.seek(sws::SeekCursor::both, sws::SeekType::from_start, start_offset);
-							tick_packet_queue.emplace_back(copy, tick);
-							tick_packet = true;
+							store_deferred(DeferredPoint::tick_start, start_offset);
+							tick_start_packet = true;
+						}
+					}
+
+					auto& tick_end = readers[DeferredPoint::tick_end];
+					it = tick_end.find(id);
+
+					if (it != tick_end.end())
+					{
+						if (!tick_end_packet)
+						{
+							store_deferred(DeferredPoint::tick_end, start_offset);
+							tick_end_packet = true;
 						}
 					}
 
@@ -308,18 +317,19 @@ void PacketBroker::read()
 	++tick;
 }
 
-void PacketBroker::process_input()
+void PacketBroker::process_point(DeferredPoint point)
 {
-	if (input_packet_queue.empty())
+	auto& packets = deferred_packets[point];
+	if (packets.empty())
 	{
 		return;
 	}
 
-	size_t last_tick = input_packet_queue.front().tick;
+	size_t last_tick = packets.front().tick;
 
-	while (!input_packet_queue.empty())
+	while (!packets.empty())
 	{
-		auto& front_ref = input_packet_queue.front();
+		auto& front_ref = packets.front();
 
 		if (front_ref.tick != last_tick)
 		{
@@ -330,35 +340,8 @@ void PacketBroker::process_input()
 		last_tick = front_ref.tick;
 
 		auto front = std::move(front_ref);
-		input_packet_queue.pop_front();
-		read_packet_type(front.packet, input_readers);
-	}
-}
-
-void PacketBroker::process_tick()
-{
-	if (tick_packet_queue.empty())
-	{
-		return;
-	}
-
-	size_t last_tick = tick_packet_queue.front().tick;
-
-	while (!tick_packet_queue.empty())
-	{
-		auto& front_ref = tick_packet_queue.front();
-
-		if (front_ref.tick != last_tick)
-		{
-			PrintDebug(__FUNCTION__ " EXCESS DATA\n");
-			break;
-		}
-
-		last_tick = front_ref.tick;
-
-		auto front = std::move(front_ref);
-		tick_packet_queue.pop_front();
-		read_packet_type(front.packet, tick_readers);
+		packets.pop_front();
+		read_packet_type(front.packet, readers[point]);
 	}
 }
 

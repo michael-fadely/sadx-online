@@ -58,10 +58,11 @@ bool player_reader(MessageID id, pnum_t pnum, sws::Packet& packet)
 			packet >> action;
 			PrintDebug("ACTION: %d\n", action);
 
+			// HACK: only works for Sonic!!!
 			if (action == 8 && data1->Action != action)
 			{
 				PrintDebug("SIMULATING JUMP\n");
-				Sonic_CheckJump(EntityData1Ptrs[pnum], CharObj2Ptrs[pnum]);
+				Sonic_CheckJump(data1, char2);
 			}
 			else if (data1->Action != action)
 			{
@@ -81,6 +82,7 @@ bool player_reader(MessageID id, pnum_t pnum, sws::Packet& packet)
 
 		case MessageID::P_Status:
 		{
+			// TODO: fix; this is wrong
 			short status;
 			packet >> status;
 			data1->Status &= ~STATUS_MASK;
@@ -136,7 +138,7 @@ void player_writer(MessageID id, pnum_t pnum, sws::Packet& packet)
 			break;
 
 		case MessageID::P_Status:
-			packet << static_cast<int16_t>((static_cast<int16_t>(last_status) & STATUS_MASK));
+			packet << static_cast<int16_t>(last_status.data() & STATUS_MASK);
 			break;
 
 		case MessageID::P_Rotation:
@@ -155,13 +157,12 @@ void player_writer(MessageID id, pnum_t pnum, sws::Packet& packet)
 
 void events::player_register()
 {
-	// TODO: provide method to defer processing to the right time in the game loop
-	globals::broker->register_reader(RegisterType::tick, MessageID::P_Action,     &player_reader);
-	globals::broker->register_reader(RegisterType::tick, MessageID::P_NextAction, &player_reader);
-	globals::broker->register_reader(RegisterType::tick, MessageID::P_Status,     &player_reader);
-	globals::broker->register_reader(RegisterType::tick, MessageID::P_Rotation,   &player_reader);
-	globals::broker->register_reader(RegisterType::tick, MessageID::P_Position,   &player_reader);
-	globals::broker->register_reader(RegisterType::tick, MessageID::P_Speed,      &player_reader);
+	globals::broker->register_reader(DeferredPoint::tick_end, MessageID::P_Action,     &player_reader);
+	globals::broker->register_reader(DeferredPoint::tick_end, MessageID::P_NextAction, &player_reader);
+	globals::broker->register_reader(DeferredPoint::tick_end, MessageID::P_Status,     &player_reader);
+	globals::broker->register_reader(DeferredPoint::tick_end, MessageID::P_Rotation,   &player_reader);
+	globals::broker->register_reader(DeferredPoint::tick_end, MessageID::P_Position,   &player_reader);
+	globals::broker->register_reader(DeferredPoint::tick_end, MessageID::P_Speed,      &player_reader);
 
 	globals::broker->register_writer(MessageID::P_Action,     &player_writer);
 	globals::broker->register_writer(MessageID::P_NextAction, &player_writer);

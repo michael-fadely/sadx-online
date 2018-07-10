@@ -13,11 +13,12 @@
 #include "MessageID.h"
 #include "typedefs.h"
 
-enum class RegisterType
+enum class DeferredPoint
 {
 	immediate,
 	input,
-	tick
+	tick_start,
+	tick_end
 };
 
 class PacketBroker
@@ -47,30 +48,28 @@ class PacketBroker
 		size_t tick;
 	};
 
-	std::deque<StoredPacket> input_packet_queue, tick_packet_queue;
+	std::unordered_map<DeferredPoint, std::deque<StoredPacket>> deferred_packets;
 
-	std::unordered_map<MessageID, MessageReader> immediate_readers, input_readers, tick_readers;
+	std::unordered_map<DeferredPoint, std::unordered_map<MessageID, MessageReader>> readers;
 	std::unordered_map<MessageID, MessageWriter> message_writers;
 
 	pnum_t player_number_ = 0;
 
 	void read_packet_type(PacketEx& packet, const std::unordered_map<MessageID, MessageReader>& readers) const;
+	void store_deferred(DeferredPoint point, ptrdiff_t start_offset);
 
 public:
 	PacketBroker() = default;
 	~PacketBroker();
 
-	void register_reader(RegisterType type, MessageID message_id, const MessageReader& reader);
+	void register_reader(DeferredPoint point, MessageID message_id, const MessageReader& reader);
 	void register_writer(MessageID message_id, const MessageWriter& writer);
 
 	void listen(const sws::Address& address);
 	void connect(const sws::Address& address);
 	void read();
 
-	// TODO: better name. Input is not being processed, this is data deferred to the input stage of the game loop.
-	void process_input();
-	// TODO: better name. This is data deferred to the start of each tick.
-	void process_tick();
+	void process_point(DeferredPoint point);
 
 	void write(MessageID message_id, bool allow_dupes = false);
 	void init_outbound();

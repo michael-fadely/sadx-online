@@ -48,7 +48,7 @@ static void tick_start()
 		return;
 	}
 
-	globals::broker->process_tick();
+	globals::broker->process_point(DeferredPoint::tick_start);
 }
 
 static void tick_end()
@@ -58,6 +58,7 @@ static void tick_end()
 		return;
 	}
 
+	globals::broker->process_point(DeferredPoint::tick_end);
 	events::player_update();
 	globals::broker->finalize();
 }

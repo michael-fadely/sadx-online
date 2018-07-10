@@ -74,7 +74,7 @@ void input_writer(MessageID id, pnum_t pnum, sws::Packet& packet)
 		default:
 			break;
 
-		case MessageID::I_Buttons:
+		case MessageID::I_Buttons: // TODO: to prevent missed input, individually send pressed and released
 			packet << net_input[pnum].HeldButtons;
 			break;
 
@@ -138,7 +138,7 @@ extern "C"
 			return;
 		}
 
-		broker->process_input();
+		broker->process_point(DeferredPoint::input);
 
 		pnum_t pnum = broker->player_number();
 
@@ -235,9 +235,9 @@ extern "C"
 
 void events::input_register()
 {
-	globals::broker->register_reader(RegisterType::input, MessageID::I_Buttons,     &input_reader);
-	globals::broker->register_reader(RegisterType::input, MessageID::I_Analog,      &input_reader); // TODO: "control" game loop point
-	globals::broker->register_reader(RegisterType::input, MessageID::I_AnalogAngle, &input_reader); // TODO: "control" game loop point
+	globals::broker->register_reader(DeferredPoint::input,      MessageID::I_Buttons,     &input_reader);
+	globals::broker->register_reader(DeferredPoint::tick_start, MessageID::I_Analog,      &input_reader);
+	globals::broker->register_reader(DeferredPoint::tick_start, MessageID::I_AnalogAngle, &input_reader);
 
 	globals::broker->register_writer(MessageID::I_Buttons,     &input_writer);
 	globals::broker->register_writer(MessageID::I_Analog,      &input_writer);
