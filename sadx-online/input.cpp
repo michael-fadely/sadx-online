@@ -138,7 +138,7 @@ extern "C"
 			return;
 		}
 
-		broker->read();
+		broker->process_input();
 
 		pnum_t pnum = broker->player_number();
 
@@ -235,9 +235,9 @@ extern "C"
 
 void events::input_register()
 {
-	globals::broker->register_reader(MessageID::I_Buttons,     &input_reader);
-	globals::broker->register_reader(MessageID::I_Analog,      &input_reader);
-	globals::broker->register_reader(MessageID::I_AnalogAngle, &input_reader);
+	globals::broker->register_reader(RegisterType::input, MessageID::I_Buttons,     &input_reader);
+	globals::broker->register_reader(RegisterType::input, MessageID::I_Analog,      &input_reader); // TODO: "control" game loop point
+	globals::broker->register_reader(RegisterType::input, MessageID::I_AnalogAngle, &input_reader); // TODO: "control" game loop point
 
 	globals::broker->register_writer(MessageID::I_Buttons,     &input_writer);
 	globals::broker->register_writer(MessageID::I_Analog,      &input_writer);

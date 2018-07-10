@@ -20,6 +20,22 @@ static dirty_t<int16_t> last_status;
 
 static Timer update_timer(1s);
 
+int Sonic_CheckJump/*@<eax>*/(EntityData1 *a1/*@<ecx>*/, CharObj2 *a2/*@<eax>*/)
+{
+	constexpr auto original = 0x00495E60;
+	int result;
+
+	__asm
+	{
+		mov ecx, a1
+		mov eax, a2
+		call original
+		mov result, eax
+	}
+
+	return result;
+}
+
 bool player_reader(MessageID id, pnum_t pnum, sws::Packet& packet)
 {
 	auto data1 = EntityData1Ptrs[pnum];
@@ -38,8 +54,21 @@ bool player_reader(MessageID id, pnum_t pnum, sws::Packet& packet)
 
 		case MessageID::P_Action:
 		{
-			packet >> data1->Action;
-			PrintDebug("ACTION: %d\n", data1->Action);
+			decltype(data1->Action) action;
+			packet >> action;
+			PrintDebug("ACTION: %d\n", action);
+
+			if (action == 8 && data1->Action != action)
+			{
+				PrintDebug("SIMULATING JUMP\n");
+				Sonic_CheckJump(EntityData1Ptrs[pnum], CharObj2Ptrs[pnum]);
+			}
+			else if (data1->Action != action)
+			{
+				PrintDebug("FORCING ACTION\n");
+				data1->Action = action;
+			}
+
 			return true;
 		}
 
@@ -127,19 +156,19 @@ void player_writer(MessageID id, pnum_t pnum, sws::Packet& packet)
 void events::player_register()
 {
 	// TODO: provide method to defer processing to the right time in the game loop
-	globals::broker->register_reader(MessageID::P_Action, &player_reader);
-	globals::broker->register_reader(MessageID::P_NextAction, &player_reader);
-	globals::broker->register_reader(MessageID::P_Status, &player_reader);
-	globals::broker->register_reader(MessageID::P_Rotation, &player_reader);
-	globals::broker->register_reader(MessageID::P_Position, &player_reader);
-	globals::broker->register_reader(MessageID::P_Speed, &player_reader);
+	globals::broker->register_reader(RegisterType::tick, MessageID::P_Action,     &player_reader);
+	globals::broker->register_reader(RegisterType::tick, MessageID::P_NextAction, &player_reader);
+	globals::broker->register_reader(RegisterType::tick, MessageID::P_Status,     &player_reader);
+	globals::broker->register_reader(RegisterType::tick, MessageID::P_Rotation,   &player_reader);
+	globals::broker->register_reader(RegisterType::tick, MessageID::P_Position,   &player_reader);
+	globals::broker->register_reader(RegisterType::tick, MessageID::P_Speed,      &player_reader);
 
-	globals::broker->register_writer(MessageID::P_Action, &player_writer);
+	globals::broker->register_writer(MessageID::P_Action,     &player_writer);
 	globals::broker->register_writer(MessageID::P_NextAction, &player_writer);
-	globals::broker->register_writer(MessageID::P_Status, &player_writer);
-	globals::broker->register_writer(MessageID::P_Rotation, &player_writer);
-	globals::broker->register_writer(MessageID::P_Position, &player_writer);
-	globals::broker->register_writer(MessageID::P_Speed, &player_writer);
+	globals::broker->register_writer(MessageID::P_Status,     &player_writer);
+	globals::broker->register_writer(MessageID::P_Rotation,   &player_writer);
+	globals::broker->register_writer(MessageID::P_Position,   &player_writer);
+	globals::broker->register_writer(MessageID::P_Speed,      &player_writer);
 
 	update_timer.start();
 }
@@ -164,8 +193,8 @@ void events::player_update()
 
 	if (last_action.dirty())
 	{
-		//globals::broker->write(MessageID::P_Action);
-		//globals::broker->write(MessageID::P_Status);
+		globals::broker->write(MessageID::P_Action);
+		globals::broker->write(MessageID::P_Status);
 		globals::broker->write(MessageID::P_Rotation);
 		globals::broker->write(MessageID::P_Position);
 		globals::broker->write(MessageID::P_Speed);
@@ -174,11 +203,11 @@ void events::player_update()
 
 	if (update_timer.done())
 	{
-		PrintDebug("SEND TIMER!\n");
-		//globals::broker->write(MessageID::P_Action);
+		/*PrintDebug("SEND TIMER!\n");
+		globals::broker->write(MessageID::P_Action);
 		globals::broker->write(MessageID::P_Rotation);
 		globals::broker->write(MessageID::P_Position);
-		globals::broker->write(MessageID::P_Speed);
+		globals::broker->write(MessageID::P_Speed);*/
 		update_timer.start();
 	}
 

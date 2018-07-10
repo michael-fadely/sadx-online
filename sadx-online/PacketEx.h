@@ -13,6 +13,13 @@ class PacketEx : public sws::Packet
 	size_t start = 0;
 
 public:
+	PacketEx() = default;
+	PacketEx(const PacketEx&) = default;
+	PacketEx(PacketEx&& other) noexcept;
+
+	PacketEx& operator=(const PacketEx& other) = default;
+	PacketEx& operator=(PacketEx&& other) noexcept;
+
 	bool add_type(MessageID type, bool allow_dupe = false);
 	void end_type();
 

@@ -15,6 +15,28 @@ sws::Packet& operator>>(sws::Packet& packet, MessageID& data)
 	return packet;
 }
 
+PacketEx::PacketEx(PacketEx&& other) noexcept
+	: Packet(std::move(other))
+{
+	building = other.building;
+	message_types = std::move(other.message_types);
+	start = other.start;
+
+	other.building = false;
+}
+
+PacketEx& PacketEx::operator=(PacketEx&& other) noexcept
+{
+	Packet::operator=(std::move(other));
+
+	building = other.building;
+	message_types = std::move(other.message_types);
+	start = other.start;
+
+	other.building = false;
+	return *this;
+}
+
 bool PacketEx::add_type(MessageID type, bool allow_dupe)
 {
 	sws::enforce(!building, "Attempt to add new type while still building an old one.");

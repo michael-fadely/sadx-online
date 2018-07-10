@@ -41,17 +41,17 @@ static void __cdecl LoadLevel_r()
 	events::player_register();
 }
 
-void tick_start()
+static void tick_start()
 {
 	if (!globals::broker)
 	{
 		return;
 	}
 
-	globals::broker->read();
+	globals::broker->process_tick();
 }
 
-void tick_end()
+static void tick_end()
 {
 	if (!globals::broker)
 	{
@@ -59,7 +59,6 @@ void tick_end()
 	}
 
 	events::player_update();
-
 	globals::broker->finalize();
 }
 
@@ -156,6 +155,12 @@ extern "C"
 	void __declspec(dllexport) __cdecl OnFrame()
 	{
 		tick_end();
+	
+		if (globals::broker)
+		{
+			globals::broker->read();
+		}
+
 		tick_start();
 	}
 

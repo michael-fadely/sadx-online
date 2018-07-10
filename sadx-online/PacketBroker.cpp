@@ -64,15 +64,79 @@ void spawn_character(const int index, const Characters character)
 	MovePlayerToStartPoint(object->Data1);
 }
 
+PacketBroker::StoredPacket::StoredPacket(PacketEx packet_, size_t tick_)
+	: packet(std::move(packet_)),
+	  tick(tick_)
+{
+}
+
+PacketBroker::StoredPacket::StoredPacket(StoredPacket&& other) noexcept
+	: packet(std::move(other.packet)),
+	  tick(other.tick)
+{
+}
+
+PacketBroker::StoredPacket& PacketBroker::StoredPacket::operator=(StoredPacket&& other) noexcept
+{
+	packet = std::move(other.packet);
+	tick = other.tick;
+	return *this;
+}
+
+void PacketBroker::read_packet_type(PacketEx& packet, const std::unordered_map<MessageID, MessageReader>& readers) const
+{
+	pnum_t pnum = player_number();
+
+	while (!packet.end())
+	{
+		MessageID id = MessageID::None;
+		messagelen_t size = 0;
+
+		packet >> id >> size;
+
+		if (id == MessageID::N_PlayerNumber)
+		{
+			packet >> pnum;
+			continue;
+		}
+
+		const ptrdiff_t offset = packet.tell(sws::SeekCursor::read);
+		const auto it = readers.find(id);
+
+		if (it == readers.end() || !it->second(id, pnum, packet))
+		{
+			packet.seek(sws::SeekCursor::read, sws::SeekType::from_start, offset + size);
+			continue;
+		}
+
+		if (packet.tell(sws::SeekCursor::read) - offset != size)
+		{
+			throw std::runtime_error("message reader failed to read the correct amount of data.");
+		}
+	}
+}
+
 PacketBroker::~PacketBroker()
 {
 	// restore swapped input pointers if any
 	swap_input(player_number_, 0);
 }
 
-void PacketBroker::register_reader(MessageID message_id, const MessageReader& reader)
+void PacketBroker::register_reader(RegisterType type, MessageID message_id, const MessageReader& reader)
 {
-	message_readers[message_id] = reader;
+	switch (type)
+	{
+		case RegisterType::immediate:
+			immediate_readers[message_id] = reader;
+			break;
+		case RegisterType::input:
+			input_readers[message_id] = reader;
+			break;
+		case RegisterType::tick:
+			tick_readers[message_id] = reader;
+			break;
+		default: throw;
+	}
 }
 
 void PacketBroker::register_writer(MessageID message_id, const MessageWriter& writer)
@@ -142,9 +206,10 @@ void PacketBroker::connect(const sws::Address& address)
 
 void PacketBroker::read()
 {
+	listener->receive(false);
+
 	size_t i = 0;
 	pnum_t pnum = player_number();
-	listener->receive(false);
 
 	for (auto& connection : connections)
 	{
@@ -152,6 +217,11 @@ void PacketBroker::read()
 
 		while (connection->pop(packet_in))
 		{
+			bool input_packet = false;
+			bool tick_packet = false;
+
+			const auto start_offset = packet_in.tell(sws::SeekCursor::read);
+
 			while (!packet_in.end())
 			{
 				MessageID id = MessageID::None;
@@ -166,9 +236,41 @@ void PacketBroker::read()
 				}
 
 				const ptrdiff_t offset = packet_in.tell(sws::SeekCursor::read);
-				const auto it = message_readers.find(id);
+				auto it = immediate_readers.find(id);
 
-				if (it == message_readers.end() || !it->second(id, pnum, packet_in))
+				if (it == immediate_readers.end())
+				{
+					it = input_readers.find(id);
+
+					if (it != input_readers.end())
+					{
+						if (!input_packet)
+						{
+							auto copy = packet_in;
+							copy.seek(sws::SeekCursor::both, sws::SeekType::from_start, start_offset);
+							input_packet_queue.emplace_back(copy, tick);
+							input_packet = true;
+						}
+					}
+
+					it = tick_readers.find(id);
+
+					if (it != tick_readers.end())
+					{
+						if (!tick_packet)
+						{
+							auto copy = packet_in;
+							copy.seek(sws::SeekCursor::both, sws::SeekType::from_start, start_offset);
+							tick_packet_queue.emplace_back(copy, tick);
+							tick_packet = true;
+						}
+					}
+
+					packet_in.seek(sws::SeekCursor::read, sws::SeekType::from_start, offset + size);
+					continue;
+				}
+
+				if (!it->second(id, pnum, packet_in))
 				{
 					packet_in.seek(sws::SeekCursor::read, sws::SeekType::from_start, offset + size);
 					continue;
@@ -201,6 +303,62 @@ void PacketBroker::read()
 		DisplayDebugStringFormatted(NJM_LOCATION(1, 1 + i), "RTT %u: %lld ms",
 									i, duration_cast<milliseconds>(connection->round_trip_time()).count());
 		++i;
+	}
+
+	++tick;
+}
+
+void PacketBroker::process_input()
+{
+	if (input_packet_queue.empty())
+	{
+		return;
+	}
+
+	size_t last_tick = input_packet_queue.front().tick;
+
+	while (!input_packet_queue.empty())
+	{
+		auto& front_ref = input_packet_queue.front();
+
+		if (front_ref.tick != last_tick)
+		{
+			PrintDebug(__FUNCTION__ " EXCESS DATA\n");
+			break;
+		}
+
+		last_tick = front_ref.tick;
+
+		auto front = std::move(front_ref);
+		input_packet_queue.pop_front();
+		read_packet_type(front.packet, input_readers);
+	}
+}
+
+void PacketBroker::process_tick()
+{
+	if (tick_packet_queue.empty())
+	{
+		return;
+	}
+
+	size_t last_tick = tick_packet_queue.front().tick;
+
+	while (!tick_packet_queue.empty())
+	{
+		auto& front_ref = tick_packet_queue.front();
+
+		if (front_ref.tick != last_tick)
+		{
+			PrintDebug(__FUNCTION__ " EXCESS DATA\n");
+			break;
+		}
+
+		last_tick = front_ref.tick;
+
+		auto front = std::move(front_ref);
+		tick_packet_queue.pop_front();
+		read_packet_type(front.packet, tick_readers);
 	}
 }
 
